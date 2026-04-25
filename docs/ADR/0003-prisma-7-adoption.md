@@ -67,3 +67,27 @@ maduro. Esperar más solo prolonga la deuda.
   Membership). Si en F4 necesitamos features
   específicas (full-text search, tracing, etc.), se
   evaluarán entonces.
+
+## Real-world adoption notes (post-T0.2.1)
+
+La adopción confirma las "Negative consequences" anticipadas pero
+con mayor profundidad de la documentada:
+
+- "Sintaxis cambia" subestima el cambio: Prisma 7 elimina `url` y
+  `directUrl` del datasource, requiere `prisma.config.ts` para
+  migrations, e impone adapter pattern (`@prisma/adapter-pg` +
+  `pg`) para runtime — el modelo de conexión cambia, no solo la
+  sintaxis. Reescribir el cliente para usar adapter es trabajo no
+  trivial si ya hay queries escritas.
+- El cliente generado en `src/generated/prisma/` no expone
+  `index.ts` (entry point real es `client.ts`). Pequeña fricción
+  con la convención esperada por bundlers y editores.
+- `dotenv` debe importarse explícitamente en `prisma.config.ts`
+  (`import "dotenv/config"`); el config file no lee `.env`
+  automáticamente.
+
+Calibración para futuros ADRs: cuando una "consequence negative"
+se describa como "sintaxis cambia" o "API distinta", profundizar
+una capa más — distinguir entre cambio cosmético, cambio
+estructural, y cambio de modelo. En este caso el coste real fue
+"cambio de modelo de conexión", no "sintaxis".
