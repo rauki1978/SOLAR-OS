@@ -9,7 +9,9 @@
     "noEmit": true,
     "plugins": [{ "name": "next" }],
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": ["./src/*"],
+      "@solaros/ui": ["../../packages/ui/src"],
+      "@solaros/ui/*": ["../../packages/ui/src/*"]
     }
   },
   "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],

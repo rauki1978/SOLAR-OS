@@ -1,0 +1,7 @@
+@import "@solaros/ui/globals.css";
+
+@layer base {
+  :root {
+    font-family: var(--font-sans);
+  }
+}
