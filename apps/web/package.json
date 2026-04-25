@@ -6,7 +6,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "echo \"lint configured in T0.1.2\" && exit 0",
+    "lint": "eslint . --max-warnings=0",
     "typecheck": "tsc --noEmit",
     "clean": "rimraf .next .turbo node_modules"
   },
@@ -16,10 +16,12 @@
     "react-dom": "^19.0.0"
   },
   "devDependencies": {
+    "@solaros/config": "workspace:*",
     "@types/node": "^22.0.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
-    "typescript": "^5.7.0",
-    "rimraf": "^6.0.0"
+    "eslint": "^9.0.0",
+    "rimraf": "^6.0.0",
+    "typescript": "^5.7.0"
   }
 }

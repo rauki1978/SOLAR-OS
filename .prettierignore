@@ -1,0 +1,15 @@
+node_modules
+.next
+.turbo
+dist
+coverage
+pnpm-lock.yaml
+*.min.js
+*.min.css
+.env*
+next-env.d.ts
+*.tsbuildinfo
+# Protected from formatting (versionados con su autor)
+.claude/agents/**
+docs/BLUEPRINT.md
+docs/ADR/**
