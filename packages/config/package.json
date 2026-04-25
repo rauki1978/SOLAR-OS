@@ -6,20 +6,26 @@
   "exports": {
     "./eslint/base": "./eslint/base.mjs",
     "./eslint/next": "./eslint/next.mjs",
-    "./prettier": "./prettier/index.mjs"
+    "./prettier": "./prettier/index.mjs",
+    "./vitest/base": "./vitest/base.mjs",
+    "./vitest/setup": "./vitest/setup.ts"
   },
   "dependencies": {
     "@eslint/js": "^9.0.0",
-    "typescript-eslint": "^8.0.0",
+    "@testing-library/jest-dom": "^6.0.0",
+    "@vitejs/plugin-react": "^4.3.0",
     "eslint-config-next": "^16.0.0",
     "eslint-config-prettier": "^9.0.0",
     "eslint-plugin-import": "^2.31.0",
-    "globals": "^15.0.0"
+    "globals": "^15.0.0",
+    "happy-dom": "^15.0.0",
+    "typescript-eslint": "^8.0.0"
   },
   "peerDependencies": {
     "eslint": "^9.0.0",
     "prettier": "^3.0.0",
-    "typescript": "^5.7.0"
+    "typescript": "^5.7.0",
+    "vitest": "^3.0.0"
   },
   "devDependencies": {
     "rimraf": "^6.0.0"
