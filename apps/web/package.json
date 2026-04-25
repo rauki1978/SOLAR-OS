@@ -1,0 +1,25 @@
+{
+  "name": "@solaros/web",
+  "version": "0.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "echo \"lint configured in T0.1.2\" && exit 0",
+    "typecheck": "tsc --noEmit",
+    "clean": "rimraf .next .turbo node_modules"
+  },
+  "dependencies": {
+    "next": "^16.2.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "typescript": "^5.7.0",
+    "rimraf": "^6.0.0"
+  }
+}
