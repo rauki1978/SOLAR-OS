@@ -52,6 +52,12 @@ export default tseslint.config(
     },
   },
   {
+    files: ["**/scripts/**", "**/*.script.ts"],
+    rules: {
+      "no-console": "off",
+    },
+  },
+  {
     ignores: [
       "**/node_modules/**",
       "**/.next/**",

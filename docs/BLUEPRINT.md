@@ -92,7 +92,7 @@ Estas decisiones están cerradas. Si una tarea propone reabrirlas, descartar.
 | Framework | Next.js (App Router) | 16.x |
 | UI runtime | React | 19.x |
 | Lenguaje | TypeScript (strict) | 5.x |
-| ORM | Prisma | 6.x |
+| ORM | Prisma | 7.x |
 | Base de datos | PostgreSQL (Supabase) | 16+ |
 | Auth | Clerk | última estable |
 | Storage objetos | Cloudflare R2 | — |
