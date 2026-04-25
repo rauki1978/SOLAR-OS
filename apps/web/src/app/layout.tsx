@@ -1,3 +1,5 @@
+import { PostHogProvider } from "@/lib/posthog/provider"
+
 import type { Metadata } from "next"
 
 import "./globals.css"
@@ -10,7 +12,9 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="es" className="dark" suppressHydrationWarning>
-      <body className="bg-background text-foreground antialiased">{children}</body>
+      <body className="bg-background text-foreground antialiased">
+        <PostHogProvider>{children}</PostHogProvider>
+      </body>
     </html>
   )
 }
