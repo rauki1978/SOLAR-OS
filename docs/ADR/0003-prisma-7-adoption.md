@@ -91,3 +91,39 @@ se describa como "sintaxis cambia" o "API distinta", profundizar
 una capa más — distinguir entre cambio cosmético, cambio
 estructural, y cambio de modelo. En este caso el coste real fue
 "cambio de modelo de conexión", no "sintaxis".
+
+## Errata 1 (post-T0.2.1): datasource location and DIRECT_URL for migrations
+
+T0.2.2 destapó una laguna del setup de T0.2.1 al ejecutar
+`prisma migrate dev` por primera vez. Cuatro puntos:
+
+1. **Causa raíz**: config de URL incompleta tras la migración a Prisma 7.
+   La URL no estaba en el lugar canónico que Prisma 7 espera: bloque
+   `datasource` a nivel raíz de `prisma.config.ts`. T0.2.1 la había
+   colocado dentro de `migrations.url`, clave que el CLI ignora
+   silenciosamente.
+
+2. **Para Supabase, la URL de `datasource.url` para migraciones debe ser
+   DIRECT_URL (session pooler, puerto 5432)**, no DATABASE_URL
+   (transaction pooler, puerto 6543). Razón: pgbouncer en transaction
+   mode no soporta DDL completo (prepared statements, advisory locks)
+   y `migrate` los necesita.
+
+3. **Matiz sobre Supabase**: lo que llamamos "DIRECT_URL" en realidad es
+   el session pooler (host `aws-X-eu-central-1.pooler.supabase.com:5432`),
+   no la conexión directa pura (host `db.<project-ref>.supabase.co:5432`).
+   El session pooler es la forma recomendada por Supabase desde 2024 y
+   soporta migraciones perfectamente. La conexión directa pura solo
+   resuelve por IPv6 en proyectos nuevos sin add-on de IPv4.
+
+4. **Lección de calibración**: T0.2.1 marcó "PARTE 4 — Aplicar" como
+   exitosa basándose solo en un smoke test runtime con `$queryRaw`, que
+   iba por el adapter (proceso totalmente distinto al CLI de migrate).
+   Para futuros setups de herramientas con CLI separado del runtime: el
+   smoke test debe tocar AMBOS caminos, no asumir que si el runtime
+   funciona el CLI también.
+
+Fix aplicado en T0.2.2: `prisma.config.ts` ahora declara
+`datasource: { url: env("DIRECT_URL") }` a nivel raíz, e importa `env`
+desde `prisma/config`. El `migrations.url` previo se eliminó (el bloque
+`migrations` quedaba vacío, así que se removió por completo).
