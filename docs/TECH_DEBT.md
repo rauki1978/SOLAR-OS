@@ -133,7 +133,22 @@ la cerró.
 - Trigger: cuando rotemos credenciales por primera vez (ver
   deuda "Credenciales de Supabase comprometidas") evaluamos si
   consolidar mediante symlink, monorepo-wide `.env`, o un script
-  de sync. Hasta entonces, pareja manual.
+  de sync. Hasta entonces, pareja manual. T0.2.4 agrava la
+  situación añadiendo APP_USER_PASSWORD a la sincronización
+  manual entre ambos archivos.
+
+### Asimetría shadow ↔ real DB en migraciones que tocan `_prisma_migrations` u objetos del sistema
+- Origen: T0.2.4 (commit pendiente).
+- Detalle: el shadow database de Prisma `migrate dev` corre las
+  migraciones secuencialmente pero sin materializar
+  `_prisma_migrations` durante la corrida (solo en la real DB,
+  post-aplicación). Cualquier migración que referencie esa tabla
+  o tablas creadas por extensiones del sistema (pg_cron,
+  pg_extension, etc.) debe envolverse en
+  `DO $$ ... IF EXISTS ... END $$` para ser shadow-safe.
+- Trigger: documentar como patrón canónico cuando aparezca la
+  siguiente migración del estilo (probable con Inngest, pg_cron,
+  o cualquier extensión que cree tablas).
 
 ## Resueltas
 

@@ -1,6 +1,6 @@
 # ADR-0004: Dual role architecture for RLS enforcement
 
-- **Status:** Accepted (implementation pending in T0.2.4)
+- **Status:** Accepted (implemented partially in T0.2.4 part 1; wrapper + tests pending)
 - **Date:** 2026-04-26
 - **Decided by:** Founder
 
@@ -214,9 +214,71 @@ Tres criterios objetivos:
 3. Este ADR queda actualizado a
    `Status: Accepted (implemented in T0.2.4)`.
 
-## Verification
+## Adoption notes (post-T0.2.4 part 1)
 
-El éxito de T0.2.4 se mide por:
-1. `scripts/smoke-rls.ts` pasa 3/3 sin modificarse.
-2. Tests de aislamiento multi-tenant pasan en Vitest.
-3. ADR queda actualizado a `Status: Accepted (implemented in T0.2.4)`.
+Notas de la ejecución del 2026-04-26.
+
+### Frictions encountered
+
+1. **Pre-existing `app_user` role**: el usuario había creado
+   manualmente el rol vía SQL Editor de Supabase en una sesión
+   anterior. La migración `create_app_user_role` (v1) falló con
+   42710. Resuelto haciendo la migración idempotente con
+   `DO $$ ... IF NOT EXISTS ... CREATE ROLE ... END $$`.
+
+2. **supautils bloquea ALTER ROLE NOSUPERUSER**: intento de
+   normalizar atributos del rol falló con 42501. La extensión
+   supautils de Supabase intercepta a nivel parser, no a nivel
+   semántico. Conclusión: no podemos forzar atributos del rol
+   desde el código de migración bajo el rol postgres de Supabase.
+   Mitigación: confiar en el default de CREATE ROLE NOLOGIN
+   (NOSUPERUSER, NOBYPASSRLS por defecto) + verify-app-user.ts
+   como red de seguridad.
+
+3. **Drift checksum tras rollback manual**: tras `prisma migrate
+   resolve --rolled-back` y editar el SQL, Prisma detectó drift y
+   bloqueó re-aplicación. Resuelto con script
+   `forget-migration.ts` (operación cualificada que solo borra
+   filas con `finished_at IS NULL` Y `rolled_back_at IS NOT NULL`).
+
+4. **GRANT ON ALL TABLES barre `_prisma_migrations`**: el GRANT
+   indiscriminado dio acceso DML al historial de migraciones.
+   Cerrado con migración correctiva
+   `revoke_app_user_from_prisma_migrations`.
+
+5. **Asimetría shadow ↔ real DB**: el REVOKE falló en shadow
+   porque `_prisma_migrations` no existe ahí mientras corre la
+   migración (Prisma la materializa post-aplicación en la real).
+   Patrón canónico shadow-safe: `DO $$ ... IF EXISTS ... END $$`.
+
+### Tools added
+
+Como subproducto de la fricción:
+
+- `scripts/forget-migration.ts` — borra filas de
+  `_prisma_migrations` con guarda de seguridad (solo si
+  `finished_at IS NULL AND rolled_back_at IS NOT NULL`).
+  Operacional, queda en el repo permanente.
+- `scripts/verify-app-user.ts` — inspecciona estado del rol
+  app_user (atributos + grants).
+- `scripts/whoami.ts` — verifica qué rol está activo en
+  DATABASE_URL.
+- `scripts/bootstrap-app-user.ts` — setea password + LOGIN
+  leyendo de env. Idempotente.
+
+### Verification at end of part 1
+
+- `pnpm db:smoke-rls` (refactor con patrón dual): 3/3 PASS.
+- `app_user` con rolcanlogin=true, rolbypassrls=false,
+  rolsuper=false. 12 grants exactos sobre las 3 tablas de
+  tenancy.
+- Migration history en _prisma_migrations limpio: 4 migraciones
+  aplicadas (initial_tenancy, enable_rls_tenancy,
+  create_app_user_role, revoke_app_user_from_prisma_migrations).
+
+### Pending for T0.2.4 part 2
+
+- Wrapper `getTenantPrisma()` y `getAdminPrisma()` en
+  `apps/web/src/lib/tenant.ts`.
+- Tests Vitest de aislamiento multi-tenant invocando el
+  subagente `tenant-isolation-tester`.
