@@ -75,17 +75,144 @@ Negativas:
 
 ## Implementation
 
-Implementación completa en T0.2.4:
-- Crear rol `app_user` (mecanismo concreto a decidir en T0.2.4
-  pre-implementación).
-- Grants iniciales sobre las 3 tablas existentes.
-- `ALTER DEFAULT PRIVILEGES` para futuras tablas (a evaluar).
-- Actualizar `DATABASE_URL` en .env.local y `.env.example`.
-- Actualizar el adapter de Prisma para conectar con la nueva URL.
-- Re-correr `scripts/smoke-rls.ts` y verificar que pasa 3/3.
-- Construir `getTenantPrisma()` wrapper (alcance original
-  de T0.2.4).
-- Tests de aislamiento Vitest.
+Plan de T0.2.4 con cinco decisiones cerradas en sesión del 2026-04-26.
+
+### D1. Creación del rol `app_user`
+
+Mecanismo dual:
+
+- **Migración Prisma** (`prisma/migrations/<ts>_create_app_user/`)
+  crea el rol con `CREATE ROLE app_user NOLOGIN`. La migración es
+  reproducible vía `prisma migrate deploy` en cualquier entorno.
+- **Script de bootstrap** (`packages/database/scripts/bootstrap-app-user.ts`)
+  lee `APP_USER_PASSWORD` desde `process.env` y ejecuta
+  `ALTER ROLE app_user PASSWORD '...' LOGIN`. Idempotente, se
+  corre una vez por entorno tras cada rotación.
+
+Rechazadas: rol creado manualmente vía Supabase SQL editor
+(rompe reproducibilidad), y password literal en migración SQL
+(commit de secreto a git).
+
+### D2. Concesión de privilegios
+
+Migración aplica dos bloques:
+
+- `GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO app_user`
+  + el equivalente sobre `ALL SEQUENCES`. Cubre las 3 tablas
+  actuales (`Organization`, `User`, `Membership`).
+- `ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ... ON TABLES TO app_user`
+  + el equivalente para `SEQUENCES`. Cubre tablas futuras
+  creadas por `postgres` (todas las migraciones de Prisma).
+
+Razón: queremos que cuando T1.1.1 cree `Lead`, T1.2.1 cree
+`Project`, etc., los grants se hereden automáticamente sin
+que el dev tenga que acordarse.
+
+Rechazada: `ALTER TABLE ... OWNER TO app_user` (transferir
+ownership rompe migraciones futuras donde `postgres` necesita
+privilegios de owner).
+
+### D3. Mapping de connection strings
+
+Convención adoptada:
+
+| Variable        | Rol         | Pooler             | Uso                            |
+|-----------------|-------------|--------------------|--------------------------------|
+| `DATABASE_URL`  | `app_user`  | transaction (6543) | Runtime adapter de Prisma      |
+| `DIRECT_URL`    | `postgres`  | session (5432)     | Migraciones (prisma.config.ts) |
+
+Cambio respecto al estado actual: `DATABASE_URL` deja de apuntar
+a `postgres` y pasa a apuntar a `app_user`. `DIRECT_URL` sin
+cambios. Se actualiza `apps/web/.env.local`, `packages/database/.env`,
+y `.env.example` (sin secrets en este último).
+
+La duplicación entre los dos `.env` está registrada en
+`docs/tech-debt.md` entrada #11 — T0.2.4 la agrava añadiendo
+`APP_USER_PASSWORD` a la sincronización manual.
+
+### D4. Bypass para webhooks y operaciones admin
+
+El módulo `apps/web/src/lib/tenant.ts` exporta dos funciones:
+
+- `getTenantPrisma(orgId: string)` — uso por defecto. Conecta
+  con `DATABASE_URL` (rol `app_user`, sin BYPASSRLS). Toda
+  query pasa por `runTenantTx` con `SET LOCAL app.current_org_id`.
+- `getAdminPrisma()` — uso restringido. Conecta con `DIRECT_URL`
+  (rol `postgres`, BYPASSRLS). Permitido solo en:
+  - Handlers de webhooks de Clerk (`apps/web/src/app/api/webhooks/clerk/`).
+  - Jobs admin de Inngest que operan cross-tenant.
+  - Scripts de mantenimiento en `packages/database/scripts/`.
+
+Cualquier uso de `getAdminPrisma()` fuera de estos contextos
+debe justificarse en code review y, si se acepta, registrarse
+en `docs/tech-debt.md`.
+
+Rechazadas:
+- Valor placeholder de `app.current_org_id` reconocido por la
+  policy como bypass (magia frágil).
+- Funciones SQL `SECURITY DEFINER` para ops admin (lógica
+  crítica fuera del código TS, patrón anticuado).
+
+### D5. Forma del wrapper `getTenantPrisma`
+
+API pública del wrapper:
+
+```ts
+export function getTenantPrisma(organizationId: string) {
+  return {
+    runTenantTx: <T>(fn: (tx: PrismaTransactionClient) => Promise<T>) => Promise<T>
+  }
+}
+```
+
+Uso esperado en módulos:
+
+```ts
+// modules/projects/queries.ts
+export async function listProjects() {
+  const session = await requireSession()
+  const db = getTenantPrisma(session.organizationId)
+  return db.runTenantTx(tx => tx.project.findMany())
+}
+```
+
+Implementación interna: `runTenantTx` abre `$transaction([...])`
+con un primer statement `SET LOCAL app.current_org_id = '<id>'`
+seguido de la query del callback. `SET LOCAL` garantiza que la
+variable de sesión se libera al cerrar la transacción y no
+contamina conexiones reutilizadas por el pooler.
+
+Rechazadas:
+- `$extends` con AsyncLocalStorage (magia que falla silenciosa
+  si alguien olvida poblar el contexto).
+- Cliente Prisma cacheado por `orgId` (optimización prematura).
+- Ejecutar `SET` fuera de transacción (no funciona — `SET LOCAL`
+  requiere transacción; `SET SESSION` se filtraría a otras orgs
+  a través del pooler).
+
+### Regla de proceso — gestión de la password de `app_user`
+
+La password de `app_user` se genera localmente y nunca pasa por
+chat con el asistente. Comando recomendado:
+
+- Linux/Mac: `openssl rand -base64 32 | pbcopy` (o `xclip` en Linux).
+- Windows PowerShell: `[Convert]::ToBase64String((1..32 | %{Get-Random -Maximum 256}))` y copiar manualmente.
+
+Va directa al portapapeles, de ahí a `.env.local`, `.env` y al
+comando `ALTER ROLE` que ejecuta el bootstrap. Esto evita
+reproducir el incidente registrado en `docs/tech-debt.md` #6.
+
+### Verificación de éxito de T0.2.4
+
+Tres criterios objetivos:
+
+1. `packages/database/scripts/smoke-rls.ts` (creado en T0.2.3,
+   fallaba 3/3 con el rol `postgres`) pasa 3/3 sin modificarse
+   tras cambiar `DATABASE_URL` a `app_user`.
+2. Tests Vitest de aislamiento multi-tenant pasan
+   (escritos en T0.2.4 con el subagente `tenant-isolation-tester`).
+3. Este ADR queda actualizado a
+   `Status: Accepted (implemented in T0.2.4)`.
 
 ## Verification
 
